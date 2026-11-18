@@ -17,6 +17,14 @@
 - **CSV 导出**：导出当前筛选结果，含中文描述；UTF-8 BOM 便于表格软件读取。
 - **桌面体验**：暂停 / 继续、设置持久化、深浅主题、可用时驻留系统托盘、应用菜单入口；无系统标题栏，窗口按钮随主题切换。
 
+## 界面预览
+
+以下为示例数据预览；实际运行时采集本机数据。
+
+![资源总览](docs/screenshots/overview.png)
+
+![网络流量](docs/screenshots/network.png)
+
 ## 安装包（推荐）
 
 从 [GitHub Releases](https://github.com/kallcurry/ubuntu-Resource-Monitoring/releases) 下载
