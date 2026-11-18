@@ -1,15 +1,19 @@
-脉冲 Pulse 首个原生安装包，面向 **Ubuntu 24.04 x86_64 / amd64**。
+脉冲 Pulse v0.1.1，面向 **Ubuntu 24.04 x86_64 / amd64**。
+
+### 本次更新
+
+移除主窗口顶部的 Ubuntu 系统标题栏。窗口按钮与深浅主题保持一致；保留顶部拖动、双击最大化 / 还原、边缘缩放、最小化和关闭到托盘功能。
 
 ### 下载与安装
 
-- **推荐：`pulse-monitor_0.1.0_amd64.deb`**，包含 Python、Qt 和 UI 组件，安装后从应用菜单搜索“脉冲资源监控”。
-- `pulse-monitor-0.1.0-linux-x86_64.tar.gz`：便携版，解压后运行 `PulseMonitor/PulseMonitor`。
+- **推荐：`pulse-monitor_0.1.1_amd64.deb`**，包含 Python、Qt 和 UI 组件，安装后从应用菜单搜索“脉冲资源监控”。
+- `pulse-monitor-0.1.1-linux-x86_64.tar.gz`：便携版，解压后运行 `PulseMonitor/PulseMonitor`。
 - `SHA256SUMS`：安装包校验值。
 
-在下载目录执行：
+新安装或从 v0.1.0 升级，在下载目录执行（升级前先退出正在运行的旧版本）：
 
 ```bash
-sudo apt install ./pulse-monitor_0.1.0_amd64.deb
+sudo apt install ./pulse-monitor_0.1.1_amd64.deb
 ```
 
 卸载：`sudo apt remove pulse-monitor`。不需要自行安装 Python 或创建虚拟环境。

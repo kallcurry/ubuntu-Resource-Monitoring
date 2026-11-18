@@ -6,7 +6,7 @@
 |---|---|---|
 | PySide6 / Qt | 原生窗口与控件 | LGPLv3 / GPLv3 / 商业授权，依模块而定；[Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html) |
 | PySide6-Fluent-Widgets | Fluent 按钮、输入、设置、提示等 | GPLv3；[官方项目](https://github.com/zhiyiYo/PyQt-Fluent-Widgets) |
-| PySideSix-Frameless-Window | Fluent 库的传递依赖 | 见安装包许可证；[官方项目](https://github.com/zhiyiYo/PyQt-Frameless-Window) |
+| PySideSix-Frameless-Window | 无边框窗口、拖动、缩放与窗口按钮 | LGPLv3；[官方项目](https://github.com/zhiyiYo/PyQt-Frameless-Window) |
 | pyqtgraph | 实时曲线 | MIT；[官方项目](https://github.com/pyqtgraph/pyqtgraph) |
 | numpy | 图表数组处理，传递依赖 | BSD-3-Clause；[官方项目](https://numpy.org/) |
 | psutil | 系统与进程采集 | BSD-3-Clause；[官方项目](https://github.com/giampaolo/psutil) |

@@ -12,21 +12,21 @@
 - **端口查询**：本机 TCP LISTEN、UDP 绑定端点，支持 IPv4 / IPv6、协议与地址范围筛选；从端口跳到所属进程，也可查询进程的关联端口。
 - **进程结束**：确认后发送 SIGTERM，执行前验证 PID 与创建时间，防止 PID 被复用后误操作；不自动强制结束。
 - **CSV 导出**：导出当前筛选结果，含中文描述；UTF-8 BOM 便于表格软件读取。
-- **桌面体验**：暂停 / 继续、设置持久化、深浅主题、可用时驻留系统托盘、应用菜单入口。
+- **桌面体验**：暂停 / 继续、设置持久化、深浅主题、可用时驻留系统托盘、应用菜单入口；无系统标题栏，窗口按钮随主题切换。
 
 ## 安装包（推荐）
 
 从 [GitHub Releases](https://github.com/kallcurry/ubuntu-Resource-Monitoring/releases) 下载
-`pulse-monitor_0.1.0_amd64.deb`，适用于 **Ubuntu 24.04 x86_64 / amd64**。
+`pulse-monitor_0.1.1_amd64.deb`，适用于 **Ubuntu 24.04 x86_64 / amd64**。
 安装包自带 Python、Qt 和 UI 组件，不需要运行下面的源码环境安装步骤。
 
 ```bash
-sudo apt install ./pulse-monitor_0.1.0_amd64.deb
+sudo apt install ./pulse-monitor_0.1.1_amd64.deb
 ```
 
 安装后从应用菜单搜索“脉冲资源监控”，或运行 `pulse-monitor`。
 卸载使用 `sudo apt remove pulse-monitor`。设置保存在用户目录，卸载不会主动删除设置。
-同时提供解压即用的 `pulse-monitor-0.1.0-linux-x86_64.tar.gz` 和 `SHA256SUMS` 校验文件。
+同时提供解压即用的 `pulse-monitor-0.1.1-linux-x86_64.tar.gz` 和 `SHA256SUMS` 校验文件。
 显卡驱动沿用系统版本；apt 可能需要联网补齐 Ubuntu 图形系统库。
 
 ## 从源码启动
@@ -64,7 +64,7 @@ python3 -m venv .venv
 ./install-desktop-entry.sh
 ```
 
-脚本仅创建当前用户的 `~/.local/share/applications/pulse-monitor.desktop`，不需要 root。删除此文件即可移除入口。移动仓库后需要重新执行脚本。应用采用系统窗口装饰，由桌面环境管理拖动、缩放与窗口边角。
+脚本仅创建当前用户的 `~/.local/share/applications/pulse-monitor.desktop`，不需要 root。删除此文件即可移除入口。移动仓库后需要重新执行脚本。主窗口采用无边框设计，顶部空白区域可拖动，双击可最大化 / 还原；右上角保留最小化、最大化 / 还原和关闭按钮，窗口边缘可缩放。
 
 ### 常用操作
 
@@ -72,7 +72,8 @@ python3 -m venv .venv
 2. 进程页点击 CPU / 内存 / 显存表头排序，可输入“浏览器”“微信”“训练”等中文查找用途。
 3. 端口页输入端口号，选中条目后点击“查看所属进程”。
 4. `/` 或 `Ctrl+F` 聚焦搜索；总览页会先切换到进程页。
-5. “偏好设置”中调整 1–5 秒采样间隔。托盘能力缺失时，关闭窗口直接退出。
+5. 顶部空白区域拖动窗口，双击最大化 / 还原；右上角按钮控制窗口。
+6. “偏好设置”中调整 1–5 秒采样间隔。托盘能力缺失时，关闭窗口直接退出。
 
 ## 指标口径与能力边界
 
@@ -99,7 +100,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 ./run.sh --diagnose
 ```
 
-测试包括真实采样、临时回环 TCP / UDP 端口识别、PID 身份校验、专用测试子进程的结束流程、GPU 显存去重、中文搜索、数值排序、刷新选择稳定性、跨页跳转、暂停、CSV 与设置容错。测试不会结束其他应用进程。
+测试包括真实采样、临时回环 TCP / UDP 端口识别、PID 身份校验、专用测试子进程的结束流程、GPU 显存去重、中文搜索、数值排序、刷新选择稳定性、跨页跳转、暂停、CSV、设置容错以及无边框窗口的主题、最小化、最大化和关闭到托盘。测试不会结束其他应用进程。
 
 原生页面截图验证：
 
@@ -147,7 +148,7 @@ python3.12 -m venv .venv-build
 `.deb` 安装包、便携版 `.tar.gz` 和 SHA-256 校验值。PyInstaller 将解释器和应用依赖一起打包，NVIDIA 驱动库从目标系统读取。
 
 `.github/workflows/release.yml` 会在打包相关代码变更时自动构建、测试便携版和已安装应用，并验证卸载。
-推送与项目版本一致的标签（例如 `v0.1.0`）时，全部验证通过后，才创建并发布带安装包附件的 GitHub Release。
+推送与项目版本一致的标签（例如 `v0.1.1`）时，全部验证通过后，才创建并发布带安装包附件的 GitHub Release。
 
 ## 许可证与依赖
 

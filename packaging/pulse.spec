@@ -5,7 +5,8 @@ from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 ROOT = Path(SPECPATH).parent
 datas = [(str(ROOT / "pulse_monitor" / "assets"), "pulse_monitor/assets")]
 datas += collect_data_files("qfluentwidgets")
-for package in ("PySide6-Fluent-Widgets", "pyqtgraph", "psutil", "nvidia-ml-py"):
+for package in ("PySide6-Fluent-Widgets", "PySideSix-Frameless-Window",
+                "pyqtgraph", "psutil", "nvidia-ml-py"):
     datas += copy_metadata(package)
 
 a = Analysis(

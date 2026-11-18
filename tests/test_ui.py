@@ -2,10 +2,10 @@ from dataclasses import replace
 import csv
 import json
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 
-from pulse_monitor.app import MainWindow, QFileDialog
+from pulse_monitor.app import MainWindow, QFileDialog, QSystemTrayIcon
 from pulse_monitor.data import PortInfo
 
 
@@ -99,5 +99,51 @@ def test_slash_shortcut_does_not_swallow_command_path_input(qapp, tmp_path):
         qapp.processEvents()
         QTest.keyClicks(window.process_page.search, "/usr/bin")
         assert window.process_page.search.text() == "/usr/bin"
+    finally:
+        window.request_quit()
+
+
+def test_frameless_controls_themes_and_close_to_tray(qapp, tmp_path, monkeypatch):
+    window = MainWindow(tmp_path, start_worker=False)
+    try:
+        window.show()
+        qapp.processEvents()
+        assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
+        controls = window.titleBar
+        assert controls.isVisible()
+        assert controls.geometry().right() == window.width() - 1
+        assert controls.geometry().bottom() < window.overview.mapTo(window, QPoint()).y()
+
+        QTest.mouseClick(controls.minBtn, Qt.MouseButton.LeftButton)
+        qapp.processEvents()
+        assert window.isMinimized()
+        window.restore_window()
+        QTest.mouseClick(controls.maxBtn, Qt.MouseButton.LeftButton)
+        qapp.processEvents()
+        assert window.isMaximized()
+        assert controls.maxBtn.toolTip() == "还原"
+        QTest.mouseDClick(controls, Qt.MouseButton.LeftButton, pos=QPoint(30, 16))
+        qapp.processEvents()
+        assert not window.isMaximized()
+        assert controls.maxBtn.toolTip() == "最大化"
+        window.resize(1100, 780)
+        qapp.processEvents()
+        assert controls.geometry().right() == window.width() - 1
+
+        window.toggle_theme()
+        assert controls.minBtn.normalColor.name().upper() == window.colors["muted"]
+        assert controls.closeBtn.accessibleName() == "关闭"
+
+        monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", lambda: True)
+        window.settings["tray"] = True
+        QTest.mouseClick(controls.closeBtn, Qt.MouseButton.LeftButton)
+        assert not window.isVisible()
+        assert not window.quitting
+        window.restore_window()
+        assert window.isVisible()
+        window.settings["tray"] = False
+        QTest.mouseClick(controls.closeBtn, Qt.MouseButton.LeftButton)
+        assert not window.isVisible()
+        assert window.quitting
     finally:
         window.request_quit()

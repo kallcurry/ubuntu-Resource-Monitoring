@@ -9,11 +9,11 @@ from pathlib import Path
 import platform
 
 import psutil
-from PySide6.QtCore import Qt, QTimer, Signal, QItemSelectionModel
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal, QItemSelectionModel
 from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QDialog, QFileDialog, QFrame, QHeaderView,
-    QHBoxLayout, QLineEdit, QMainWindow, QMenu, QPlainTextEdit, QProgressBar, QPushButton,
+    QHBoxLayout, QLineEdit, QMenu, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSizePolicy, QStackedWidget, QSystemTrayIcon, QTableView,
     QVBoxLayout, QWidget,
 )
@@ -21,7 +21,9 @@ from qfluentwidgets import (
     CheckBox, ComboBox, FluentIcon, InfoBar, InfoBarPosition, MessageBox,
     PrimaryPushButton, PushButton, SearchLineEdit, Slider, Theme, setTheme, setThemeColor,
 )
+from qframelesswindow import FramelessMainWindow
 
+from . import __version__
 from .collectors import terminate_process
 from .data import percent, rate, size
 from .table_models import PortModel, ProcessModel, RecordProxy, TwoLineDelegate
@@ -484,11 +486,20 @@ class SettingsDialog(QDialog):
         layout.addLayout(actions)
 
 
-class MainWindow(QMainWindow):
+class MainWindow(FramelessMainWindow):
+    SIDEBAR_WIDTH = 180
+
     def __init__(self, config_dir=None, *, start_worker=True):
         super().__init__()
         self.setWindowTitle("脉冲 Pulse · 系统资源监控")
         self.setWindowIcon(QIcon(str(ICON_PATH)))
+        # Use the existing UI library's native move/resize handling. Keep only
+        # theme-aware controls, with no duplicate title or separate title band.
+        for control, name in ((self.titleBar.minBtn, "最小化"),
+                              (self.titleBar.maxBtn, "最大化"),
+                              (self.titleBar.closeBtn, "关闭")):
+            control.setToolTip(name)
+            control.setAccessibleName(name)
         self.resize(1180, 800)
         self.setMinimumSize(1040, 740)
         self.colors = dict(DARK)
@@ -514,7 +525,7 @@ class MainWindow(QMainWindow):
         body = hbox(root, spacing=0)
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(180)
+        sidebar.setFixedWidth(self.SIDEBAR_WIDTH)
         side = vbox(sidebar, (12, 24, 12, 15), 8)
         brand = hbox(spacing=10)
         logo = label()
@@ -551,7 +562,7 @@ class MainWindow(QMainWindow):
         side.addWidget(self.theme_button)
         body.addWidget(sidebar)
         container = QWidget()
-        main = vbox(container, (24, 20, 24, 20), 0)
+        main = vbox(container, (24, 40, 24, 20), 0)
         self.pages = QStackedWidget()
         self.overview = Overview(self.colors)
         self.overview.pauseRequested.connect(self.toggle_pause)
@@ -597,7 +608,8 @@ class MainWindow(QMainWindow):
         body.addWidget(container, 1)
         self.status = label("正在连接本机采集器…", "muted")
         self.statusBar().addWidget(self.status, 1)
-        self.statusBar().addPermanentWidget(label("本地实时数据  /  v0.1.0", "muted"))
+        self.statusBar().addPermanentWidget(label(f"本地实时数据  /  v{__version__}", "muted"))
+        self.titleBar.raise_()
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
         self.tray.setToolTip("脉冲 Pulse · 系统资源监控")
         menu = QMenu(self)
@@ -626,6 +638,20 @@ class MainWindow(QMainWindow):
         if start_worker:
             self.worker.start()
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # The sidebar branding keeps its full height. Only the empty area above
+        # page headers is draggable, so controls never cover page actions.
+        self.titleBar.setGeometry(self.SIDEBAR_WIDTH, 0,
+                                  max(0, self.width() - self.SIDEBAR_WIDTH), 32)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            name = "还原" if self.isMaximized() else "最大化"
+            self.titleBar.maxBtn.setToolTip(name)
+            self.titleBar.maxBtn.setAccessibleName(name)
+
     def save_settings(self):
         try:
             self.config_file.parent.mkdir(parents=True, exist_ok=True)
@@ -642,6 +668,13 @@ class MainWindow(QMainWindow):
         setTheme(Theme.LIGHT if light else Theme.DARK)
         setThemeColor(QColor(self.colors["accent"]))
         self.setStyleSheet(stylesheet(self.colors))
+        for control in (self.titleBar.minBtn, self.titleBar.maxBtn, self.titleBar.closeBtn):
+            control.setNormalColor(self.colors["muted"])
+        for control in (self.titleBar.minBtn, self.titleBar.maxBtn):
+            control.setHoverColor(self.colors["text"])
+            control.setPressedColor(self.colors["text"])
+            control.setHoverBackgroundColor(self.colors["raised"])
+            control.setPressedBackgroundColor(self.colors["line"])
         self.theme_button.setText("切换深色" if light else "切换浅色")
         for nav, icon in zip(self.nav, (FluentIcon.HOME, FluentIcon.APPLICATION, FluentIcon.LINK)):
             nav.setIcon(icon.icon(Theme.LIGHT if light else Theme.DARK))
