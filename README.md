@@ -27,6 +27,14 @@ cd ubuntu-Resource-Monitoring
 
 `setup.sh` 在仓库的 `.venv` 中安装依赖；若当前 Python 已有兼容的 PySide6，会直接复用，不修改系统 Python 包。首次安装需要联网。Ubuntu 缺少 venv 时，安装对应的 `python3-venv` 系统包后重试。
 
+Qt 固定为已验证的 PySide6 6.9.2。精简 Ubuntu 环境如提示缺少 `libEGL.so.1` 或 XCB cursor 库，可补装 Qt 的系统运行依赖：
+
+```bash
+sudo apt-get install libegl1 libopengl0 libxcb-cursor0
+```
+
+普通 Ubuntu 桌面通常已有这些图形库，安装脚本不会自动修改系统包。更多依赖见 [Qt 官方 Linux 要求](https://doc.qt.io/qt-6/linux-requirements.html)。
+
 也可以使用自己的虚拟环境：
 
 ```bash
