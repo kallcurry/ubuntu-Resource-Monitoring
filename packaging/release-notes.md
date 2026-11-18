@@ -1,19 +1,24 @@
-脉冲 Pulse v0.1.1，面向 **Ubuntu 24.04 x86_64 / amd64**。
+脉冲 Pulse v0.2.0，面向 **Ubuntu 24.04 x86_64 / amd64**。
 
 ### 本次更新
 
-移除主窗口顶部的 Ubuntu 系统标题栏。窗口按钮与深浅主题保持一致；保留顶部拖动、双击最大化 / 还原、边缘缩放、最小化和关闭到托盘功能。
+- 新增硬件详情：逐核心 CPU、内存构成、系统信息、全部 GPU、温度传感器及可用时的电池状态。
+- 新增网络流量：多网卡收发双曲线、IP / MAC、链路、累计流量与包数。
+- 新增磁盘存储：分区容量卡片、逐设备读写双曲线、IOPS 与繁忙度。
+- 总览新增资源状态速览，排行可切换 CPU、内存、显存与磁盘 I/O。
+- 进程补充线程数、父进程、启动时间与磁盘读写，支持 I/O 排序和 CSV 导出。
+- 保留无系统标题栏的深浅主题界面，优化图表历史的内存占用。
 
 ### 下载与安装
 
-- **推荐：`pulse-monitor_0.1.1_amd64.deb`**，包含 Python、Qt 和 UI 组件，安装后从应用菜单搜索“脉冲资源监控”。
-- `pulse-monitor-0.1.1-linux-x86_64.tar.gz`：便携版，解压后运行 `PulseMonitor/PulseMonitor`。
+- **推荐：`pulse-monitor_0.2.0_amd64.deb`**，包含 Python、Qt 和 UI 组件，安装后从应用菜单搜索“脉冲资源监控”。
+- `pulse-monitor-0.2.0-linux-x86_64.tar.gz`：便携版，解压后运行 `PulseMonitor/PulseMonitor`。
 - `SHA256SUMS`：安装包校验值。
 
-新安装或从 v0.1.0 升级，在下载目录执行（升级前先退出正在运行的旧版本）：
+新安装或从 v0.1.x 升级，在下载目录执行（升级前先退出正在运行的旧版本）：
 
 ```bash
-sudo apt install ./pulse-monitor_0.1.1_amd64.deb
+sudo apt install ./pulse-monitor_0.2.0_amd64.deb
 ```
 
 卸载：`sudo apt remove pulse-monitor`。不需要自行安装 Python 或创建虚拟环境。

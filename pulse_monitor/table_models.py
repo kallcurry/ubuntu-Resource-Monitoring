@@ -42,7 +42,7 @@ class RecordModel(QAbstractTableModel):
 
 
 class ProcessModel(RecordModel):
-    headers = ("进程 / 中文用途", "CPU", "内存 RSS", "显存")
+    headers = ("进程 / 中文用途", "CPU", "内存 RSS", "显存", "磁盘 I/O")
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
@@ -52,11 +52,12 @@ class ProcessModel(RecordModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return (f"{row.name}   {row.pid}\n{row.description}",
                     percent(row.cpu) if row.cpu_available else "—",
-                    size(row.rss), size(row.vram))[column]
+                    size(row.rss), size(row.vram),
+                    size(row.io_rate) + "/s" if row.io_rate is not None else "—")[column]
         if role == SORT_ROLE:
             return ((row.name.lower(), row.pid) if column == 0 else
-                    [None, row.cpu, row.rss, row.vram][column]
-                    if [None, row.cpu, row.rss, row.vram][column] is not None else -1)
+                    [None, row.cpu, row.rss, row.vram, row.io_rate][column]
+                    if [None, row.cpu, row.rss, row.vram, row.io_rate][column] is not None else -1)
         if role == Qt.ItemDataRole.ToolTipRole:
             return f"{row.name} · PID {row.pid}\n{row.description}\n{row.command}"
         if role == Qt.ItemDataRole.ForegroundRole and column == 1 and (row.cpu or 0) >= 20:

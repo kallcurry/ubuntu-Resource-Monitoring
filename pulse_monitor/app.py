@@ -26,6 +26,7 @@ from qframelesswindow import FramelessMainWindow
 from . import __version__
 from .collectors import terminate_process
 from .data import percent, rate, size
+from .details import DiskPage, HardwarePage, NetworkPage, optional_rate
 from .table_models import PortModel, ProcessModel, RecordProxy, TwoLineDelegate
 from .theme import DARK, LIGHT, stylesheet
 from .widgets import GPUCard, MetricCard, SummaryCard, TrendPanel, hbox, label, panel, vbox
@@ -68,7 +69,7 @@ class Overview(QWidget):
         super().__init__()
         self.colors = colors
         self.snapshot = None
-        layout = vbox(self, (0, 0, 0, 0), 15)
+        layout = vbox(self, (0, 0, 0, 0), 12)
         self.live = label("正在连接本机", "purpose")
         self.pause = button("暂停", FluentIcon.PAUSE, callback=self.pauseRequested.emit)
         layout.addWidget(page_header("资源总览", "掌握每一份算力，让工作流保持从容。",
@@ -82,6 +83,12 @@ class Overview(QWidget):
             cards.addWidget(card, 1)
         self.metrics["cpu"].set_selected(True)
         layout.addLayout(cards)
+        status_card = panel()
+        status_layout = hbox(status_card, (14, 6, 14, 6), 14)
+        status_layout.addWidget(label("状态速览", "section"))
+        self.observation = label("等待本机数据…", "muted", wrap=True)
+        status_layout.addWidget(self.observation, 1)
+        layout.addWidget(status_card)
         middle = hbox(spacing=14)
         self.trend = TrendPanel(colors)
         middle.addWidget(self.trend, 2)
@@ -95,7 +102,14 @@ class Overview(QWidget):
         ranking.setMinimumHeight(154)
         rank_layout = vbox(ranking, (16, 12, 16, 12), 7)
         header = hbox()
-        header.addWidget(label("资源占用排行 · CPU", "section"), 1)
+        header.addWidget(label("资源占用排行", "section"), 1)
+        self.rank_picker = ComboBox()
+        for text, key in (("CPU", "cpu"), ("内存", "rss"), ("显存", "vram"), ("磁盘 I/O", "io_rate")):
+            self.rank_picker.addItem(text, userData=key)
+        self.rank_picker.setFixedHeight(27)
+        self.rank_picker.setAccessibleName("资源排行指标")
+        self.rank_picker.currentIndexChanged.connect(self.update_ranking)
+        header.addWidget(self.rank_picker)
         all_button = button("查看全部", FluentIcon.LINK,
                             callback=lambda: self.processRequested.emit(None))
         all_button.setFixedHeight(27)
@@ -115,7 +129,7 @@ class Overview(QWidget):
             bar.setFixedWidth(80)
             bar.setRange(0, 1000)
             value = label("—", "muted")
-            value.setFixedWidth(48)
+            value.setFixedWidth(80)
             value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             row.addWidget(name, 1)
             row.addWidget(bar)
@@ -180,15 +194,19 @@ class Overview(QWidget):
         self.trend.gpu_key = self.gpu.selected.key if self.gpu.selected else ""
         self.trend.network = snapshot.network
         self.trend.append(snapshot)
-        ranked = sorted(snapshot.processes, key=lambda p: p.cpu if p.cpu is not None else -1, reverse=True)[:3]
-        for index, (name, bar, value) in enumerate(self.rank_rows):
-            process = ranked[index] if index < len(ranked) else None
-            name.setText(f"{process.name} · {process.description}" if process else "无进程数据")
-            name.setProperty("key", process.key if process else None)
-            name.setToolTip(f"PID {process.pid} · {process.description}" if process else "")
-            name.setEnabled(process is not None)
-            bar.setValue(int((process.cpu or 0)*10) if process else 0)
-            value.setText(percent(process.cpu) if process and process.cpu_available else "—")
+        self.update_ranking()
+        notes = []
+        if snapshot.cpu is not None and snapshot.cpu >= 90:
+            notes.append(f"CPU 当前 {snapshot.cpu:.0f}%")
+        if snapshot.memory_percent >= 85:
+            notes.append(f"内存当前 {snapshot.memory_percent:.0f}%")
+        if snapshot.disk_total and snapshot.disk_used / snapshot.disk_total >= .9:
+            notes.append("系统盘占用 ≥ 90%")
+        self.observation.setText("本次采样提醒：" + " · ".join(notes) if notes else
+                                 f"{len(snapshot.processes)} 个进程  ·  {snapshot.cores} 个逻辑核心  ·  "
+                                 f"Swap {size(snapshot.swap_used)} / {size(snapshot.swap_total)}" +
+                                 (f"  ·  1 分钟负载 {snapshot.load_average[0]:.2f}" if snapshot.load_average else ""))
+        self.observation.setToolTip("当前采样提醒阈值：CPU 90%、内存 85%、系统盘容量 90%；不是持续负载告警。")
         self.disk_capacity.setText(f"系统盘 /  ·  {size(snapshot.disk_used)} / {size(snapshot.disk_total)}")
         self.disk_bar.setValue(int(snapshot.disk_used / snapshot.disk_total * 1000) if snapshot.disk_total else 0)
         self.disk_bar.setStyleSheet(f"QProgressBar::chunk {{background:{self.colors['blue']};}}")
@@ -203,6 +221,27 @@ class Overview(QWidget):
                 self.network_picker.addItem(f"网卡：{name}", userData=name)
             self.network_picker.setCurrentIndex(max(0, self.network_picker.findData(key)))
             self.network_picker.blockSignals(False)
+
+    def update_ranking(self, *args):
+        if not self.snapshot:
+            return
+        snapshot = self.snapshot
+        key = self.rank_picker.currentData()
+        ranked = sorted(snapshot.processes, key=lambda p: getattr(p, key) if getattr(p, key) is not None else -1, reverse=True)[:3]
+        scale = (100 if key == "cpu" else snapshot.memory_total if key == "rss" else
+                 sum(g.total or 0 for g in snapshot.gpus) if key == "vram" else
+                 max((p.io_rate or 0 for p in ranked), default=0)) or 1
+        for index, (name, bar, value) in enumerate(self.rank_rows):
+            process = ranked[index] if index < len(ranked) else None
+            name.setText(f"{process.name} · {process.description}" if process else "无进程数据")
+            name.setProperty("key", process.key if process else None)
+            name.setToolTip(f"PID {process.pid} · {process.description}" if process else "")
+            name.setEnabled(process is not None)
+            metric = getattr(process, key) if process else None
+            bar.setValue(min(1000, int((metric or 0) / scale * 1000)))
+            bar.setToolTip("相对当前最高磁盘 I/O 速率" if key == "io_rate" else "占整机资源的比例")
+            value.setText(percent(metric) if key == "cpu" and process and process.cpu_available else
+                          optional_rate(metric) if key == "io_rate" else size(metric) if key != "cpu" else "—")
 
 
 class DetailPanel(QFrame):
@@ -239,7 +278,7 @@ class DetailPanel(QFrame):
         self.command.setFixedHeight(76 if kind == "process" else 52)
         body.addWidget(self.command)
         self.fields = []
-        names = ("CPU · 整机", "物理内存 RSS", "GPU 显存") if kind == "process" else ("所属进程", "PID", "地址范围")
+        names = ("CPU · 整机", "物理内存 RSS", "GPU 显存", "线程数", "父进程 PID", "启动时间", "磁盘读取", "磁盘写入") if kind == "process" else ("所属进程", "PID", "地址范围")
         for title in names:
             row = hbox()
             row.addWidget(label(title, "muted"), 1)
@@ -302,11 +341,14 @@ class DetailPanel(QFrame):
             self.command.setPlainText(row.command)
             self.state.setText(states.get(row.status, row.status))
             for widget, value in zip(self.fields, (percent(row.cpu) if row.cpu_available else "—",
-                                                   size(row.rss), size(row.vram))):
-                widget.setText(value)
+                                                   size(row.rss), size(row.vram), row.threads if row.threads is not None else "—",
+                                                   row.parent_pid if row.parent_pid is not None else "—",
+                                                   datetime.fromtimestamp(row.created).strftime("%m-%d %H:%M:%S") if row.created is not None else "—",
+                                                   optional_rate(row.read_rate), optional_rate(row.write_rate))):
+                widget.setText(str(value))
             self.primary.setEnabled(row.pid > 1 and row.pid != os.getpid() and row.created is not None)
             self.related.setEnabled(row.created is not None)
-            self.note.setText("CPU 按整机算力统计。— 表示权限或驱动未提供该指标。")
+            self.note.setText("CPU 按整机算力统计。磁盘 I/O 不含命中缓存的读写；— 表示采样中或指标不可读。")
         else:
             scopes = {"local": "仅本机回环", "any": "所有网卡", "specific": "指定网卡地址"}
             self.name.setText(str(row.port) + "  " + row.protocol)
@@ -377,6 +419,7 @@ class TablePage(QWidget):
             self.table.setColumnWidth(1, 70)
             self.table.setColumnWidth(2, 88)
             self.table.setColumnWidth(3, 85)
+            self.table.setColumnWidth(4, 90)
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         else:
             for column, width in ((0, 62), (1, 55), (2, 142), (4, 66)):
@@ -488,6 +531,9 @@ class SettingsDialog(QDialog):
 
 class MainWindow(FramelessMainWindow):
     SIDEBAR_WIDTH = 180
+    NAVIGATION = (("资源总览", FluentIcon.HOME), ("进程洞察", FluentIcon.APPLICATION),
+                  ("端口查询", FluentIcon.LINK), ("硬件详情", FluentIcon.TILES),
+                  ("网络流量", FluentIcon.WIFI), ("磁盘存储", FluentIcon.SAVE))
 
     def __init__(self, config_dir=None, *, start_worker=True):
         super().__init__()
@@ -540,7 +586,7 @@ class MainWindow(FramelessMainWindow):
         side.addSpacing(20)
         side.addWidget(label("工作空间", "eyebrow"))
         self.nav = []
-        for index, (text, icon) in enumerate((("资源总览", FluentIcon.HOME), ("进程洞察", FluentIcon.APPLICATION), ("端口查询", FluentIcon.LINK))):
+        for index, (text, icon) in enumerate(self.NAVIGATION):
             nav = QPushButton(text)
             nav.setIcon(icon.icon())
             nav.setProperty("variant", "nav")
@@ -602,7 +648,14 @@ class MainWindow(FramelessMainWindow):
         self.port_page.layout.addWidget(self.port_note)
         self.port_page.detail.primaryRequested.connect(self.open_port_process)
         self.port_page.detail.copyRequested.connect(self.copy_endpoint)
-        for page in (self.overview, self.process_page, self.port_page):
+        self.hardware_page = HardwarePage(self.colors, page_header(
+            "硬件详情", "从逐核心负载到内存构成，了解机器的工作状态。", "KNOW YOUR MACHINE"))
+        self.network_page = NetworkPage(self.colors, page_header(
+            "网络流量", "同时查看各网卡流量、地址与链路状态。", "FOLLOW EVERY BYTE"))
+        self.disk_page = DiskPage(self.colors, page_header(
+            "磁盘存储", "容量是否充足，读写是否繁忙，一页查看。", "ROOM FOR YOUR WORK"))
+        for page in (self.overview, self.process_page, self.port_page,
+                     self.hardware_page, self.network_page, self.disk_page):
             self.pages.addWidget(page)
         main.addWidget(self.pages)
         body.addWidget(container, 1)
@@ -676,10 +729,12 @@ class MainWindow(FramelessMainWindow):
             control.setHoverBackgroundColor(self.colors["raised"])
             control.setPressedBackgroundColor(self.colors["line"])
         self.theme_button.setText("切换深色" if light else "切换浅色")
-        for nav, icon in zip(self.nav, (FluentIcon.HOME, FluentIcon.APPLICATION, FluentIcon.LINK)):
+        for nav, (_, icon) in zip(self.nav, self.NAVIGATION):
             nav.setIcon(icon.icon(Theme.LIGHT if light else Theme.DARK))
         self.overview.trend.set_theme()
         self.overview.gpu.ring.update()
+        for page in (self.hardware_page, self.network_page, self.disk_page):
+            page.set_theme()
         self.process_page.table.viewport().update()
         self.port_page.table.viewport().update()
         self.process_page.detail.primary.setStyleSheet(
@@ -699,7 +754,7 @@ class MainWindow(FramelessMainWindow):
             nav.setChecked(i == index)
 
     def focus_search(self):
-        if self.pages.currentIndex() == 0:
+        if self.pages.currentIndex() not in (1, 2):
             self.go(1)
         page = self.port_page if self.pages.currentIndex() == 2 else self.process_page
         page.search.setFocus()
@@ -714,6 +769,8 @@ class MainWindow(FramelessMainWindow):
             return
         self.snapshot = snapshot
         self.overview.update_snapshot(snapshot)
+        for page in (self.hardware_page, self.network_page, self.disk_page):
+            page.update_snapshot(snapshot)
         self.process_page.update_records(snapshot.processes)
         self.summaries[0].value.setText(percent(snapshot.cpu))
         self.summaries[1].value.setText(size(snapshot.memory_used) + " / " + size(snapshot.memory_total))
@@ -823,7 +880,8 @@ class MainWindow(FramelessMainWindow):
         try:
             with open(path, "w", encoding="utf-8-sig", newline="") as output:
                 writer = csv.writer(output)
-                writer.writerow(["进程", "中文描述", "PID", "用户", "CPU整机%", "RSS字节", "显存字节", "命令"])
+                writer.writerow(["进程", "中文描述", "PID", "用户", "CPU整机%", "RSS字节", "显存字节", "命令",
+                                 "线程数", "父进程PID", "读取字节每秒", "写入字节每秒"])
                 for index in range(self.process_page.proxy.rowCount()):
                     source = self.process_page.proxy.mapToSource(self.process_page.proxy.index(index, 0))
                     p = self.process_page.model.rows[source.row()]
@@ -832,7 +890,8 @@ class MainWindow(FramelessMainWindow):
                         return "'" + value if value.startswith(("=", "+", "-", "@", "\t", "\r")) else value
                     writer.writerow([text(p.name), text(p.description), p.pid, text(p.user),
                                      p.cpu if p.cpu is not None else "", p.rss if p.rss is not None else "",
-                                     p.vram if p.vram is not None else "", text(p.command)])
+                                     p.vram if p.vram is not None else "", text(p.command), p.threads, p.parent_pid,
+                                     p.read_rate, p.write_rate])
             self.notify("导出完成", f"已保存 {self.process_page.proxy.rowCount()} 个进程。")
         except OSError as error:
             self.notify("导出失败", str(error), error=True)

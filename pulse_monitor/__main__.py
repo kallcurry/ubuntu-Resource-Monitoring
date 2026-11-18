@@ -59,7 +59,7 @@ def main():
                 return
             if not window.paused:
                 window.toggle_pause()
-            for index, name in enumerate(("overview", "processes", "ports")):
+            for index, name in enumerate(("overview", "processes", "ports", "hardware", "network", "storage")):
                 window.go(index)
                 app.processEvents()
                 window.grab().save(str(destination / f"pulse-native-{name}.png"))

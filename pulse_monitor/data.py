@@ -1,6 +1,6 @@
 """Immutable snapshots shared between the collection thread and the UI."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import ipaddress
 
 
@@ -18,10 +18,83 @@ class ProcessInfo:
     rss: int | None
     vram: int | None
     cpu_available: bool = True
+    threads: int | None = None
+    parent_pid: int | None = None
+    read_rate: float | None = None
+    write_rate: float | None = None
 
     @property
     def key(self) -> tuple[int, float | None]:
         return self.pid, self.created
+
+    @property
+    def io_rate(self) -> float | None:
+        return self.read_rate + self.write_rate if self.read_rate is not None and self.write_rate is not None else None
+
+
+@dataclass(frozen=True)
+class HardwareInfo:
+    cpu_model: str = "型号不可读"
+    physical_cores: int | None = None
+    distribution: str = "Linux"
+    kernel: str = "—"
+    architecture: str = "—"
+
+
+@dataclass(frozen=True)
+class NetworkInfo:
+    name: str
+    is_up: bool | None = None
+    speed: int | None = None
+    mtu: int | None = None
+    ipv4: tuple[str, ...] = ()
+    ipv6: tuple[str, ...] = ()
+    mac: str = "—"
+    download: float | None = None
+    upload: float | None = None
+    received: int = 0
+    sent: int = 0
+    packets_received: int = 0
+    packets_sent: int = 0
+    errors: int = 0
+    dropped: int = 0
+
+
+@dataclass(frozen=True)
+class DiskInfo:
+    name: str
+    read_rate: float | None = None
+    write_rate: float | None = None
+    read_iops: float | None = None
+    write_iops: float | None = None
+    busy: float | None = None
+
+
+@dataclass(frozen=True)
+class PartitionInfo:
+    mountpoint: str
+    device: str
+    filesystem: str
+    total: int = 0
+    used: int = 0
+    free: int = 0
+    usage: float | None = None
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class SensorInfo:
+    name: str
+    temperature: float
+    high: float | None = None
+    critical: float | None = None
+
+
+@dataclass(frozen=True)
+class BatteryInfo:
+    percent: float
+    plugged: bool
+    remaining: int | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +163,17 @@ class Snapshot:
     uptime: float
     duration: float
     gpu_note: str = ""
+    hardware: HardwareInfo = field(default_factory=HardwareInfo)
+    cpu_per_core: tuple[float | None, ...] = ()
+    load_average: tuple[float, ...] = ()
+    memory_cached: int | None = None
+    memory_buffers: int | None = None
+    memory_free: int | None = None
+    network_details: tuple[NetworkInfo, ...] = ()
+    disks: tuple[DiskInfo, ...] = ()
+    partitions: tuple[PartitionInfo, ...] = ()
+    sensors: tuple[SensorInfo, ...] = ()
+    battery: BatteryInfo | None = None
 
     @property
     def memory_used(self) -> int:

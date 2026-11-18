@@ -7,6 +7,7 @@ import re
 import shlex
 
 KNOWN = {
+    "PulseMonitor": "脉冲 · 系统资源监控", "pulse-monitor": "脉冲 · 系统资源监控",
     "chrome": "谷歌浏览器", "chromium": "Chromium 浏览器", "firefox": "火狐浏览器",
     "msedge": "Edge 浏览器", "code": "VS Code 代码编辑器", "code-insiders": "VS Code 预览版",
     "codex": "Codex 开发助手", "chatgpt": "ChatGPT 桌面应用",

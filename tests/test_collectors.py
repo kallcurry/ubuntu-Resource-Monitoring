@@ -66,16 +66,25 @@ def test_real_sampling_first_and_resumed_values_are_not_false_zeroes():
     try:
         first = collector.collect()
         assert first.cpu is None and first.download is None
+        assert all(value is None for value in first.cpu_per_core)
         assert first.memory_total > 0
         assert any(p.pid == os.getpid() and p.rss > 0 for p in first.processes)
         time.sleep(.12)
         second = collector.collect()
         assert second.cpu is not None and 0 <= second.cpu <= 100
+        assert second.cpu_per_core and all(0 <= value <= 100 for value in second.cpu_per_core)
+        assert second.hardware.cpu_model and second.partitions
+        assert any(n.name == second.network for n in second.network_details)
+        owned = next(p for p in second.processes if p.pid == os.getpid())
+        assert owned.threads >= 1 and owned.read_rate is not None
         assert all(p.cpu is None or 0 <= p.cpu <= 100 for p in second.processes)
         collector.reset()
         resumed = collector.collect()
         assert resumed.cpu is None and resumed.disk_read is None
         assert all(p.cpu is None for p in resumed.processes)
+        assert all(value is None for value in resumed.cpu_per_core)
+        assert all(p.read_rate is None for p in resumed.processes)
+        assert all(d.read_rate is None for d in resumed.disks)
     finally:
         collector.close()
 

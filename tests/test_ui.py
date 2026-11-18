@@ -147,3 +147,45 @@ def test_frameless_controls_themes_and_close_to_tray(qapp, tmp_path, monkeypatch
         assert window.quitting
     finally:
         window.request_quit()
+
+
+def test_rich_pages_selection_charts_and_resource_history(qapp, rich_sample, tmp_path):
+    window = MainWindow(tmp_path, start_worker=False)
+    try:
+        window.show()
+        window.on_snapshot(rich_sample)
+        qapp.processEvents()
+        assert window.pages.count() == 6 and len(window.nav) == 6
+        hardware, network, storage = window.hardware_page, window.network_page, window.disk_page
+        assert len(hardware.core_grid.values) == 16
+        assert hardware.memory.fields['缓存'].text() == '2.0 GiB'
+        assert 'Ubuntu' in hardware.system.fields['发行版'].text()
+        assert network.table.rowCount() == 2 and storage.table.rowCount() == 2
+        row = next(r for r in range(network.table.rowCount()) if network.table.item(r, 0).text() == 'lo')
+        network.table.setCurrentCell(row, 0)
+        assert network.trend.network == 'lo'
+        assert network.details.fields['IPv4'].text() == '127.0.0.1'
+        assert network.trend.points[-1][1] == 1024 / 1024**2
+        assert network.trend.secondary_points[-1][1] == 1024 / 1024**2
+        assert set(storage.partition_widgets) == {'/', '/data'}
+        assert storage.trend.points[-1][1] == 2
+        assert storage.trend.secondary_points[-1][1] == 1
+        window.overview.rank_picker.setCurrentIndex(1)
+        assert 'python3' in window.overview.rank_rows[0][0].text()
+        window.overview.rank_picker.setCurrentIndex(3)
+        assert '/s' in window.overview.rank_rows[0][2].text()
+        window.on_snapshot(replace(rich_sample, timestamp=1001))
+        assert network.table.selected_name() == 'lo'
+        assert all(not s.processes for s in network.trend.history)
+        history_size = len(storage.trend.history)
+        window.toggle_theme()
+        assert len(storage.trend.history) == history_size
+        window.go(5)
+        window.focus_search()
+        assert window.pages.currentIndex() == 1
+        window.on_snapshot(replace(rich_sample, timestamp=1002, network_details=(), disks=(), partitions=(), sensors=()))
+        assert network.details.fields['网卡'].text() == '—'
+        assert not storage.partition_widgets
+        assert not network.table.rowCount() and not storage.table.rowCount()
+    finally:
+        window.request_quit()

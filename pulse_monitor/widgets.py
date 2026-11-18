@@ -1,6 +1,7 @@
 """Rounded native panels and real-time plot widgets."""
 
 from collections import deque
+from dataclasses import replace
 import math
 
 import pyqtgraph as pg
@@ -54,7 +55,7 @@ class MetricCard(QFrame):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAccessibleName(title + "资源卡片")
         self.setMinimumWidth(150)
-        self.setFixedHeight(120)
+        self.setFixedHeight(110)
         layout = vbox(self, (14, 12, 14, 12), 5)
         self.title = label(title, "muted")
         self.value = label("采样中", "value")
@@ -127,8 +128,10 @@ class TrendPanel(QFrame):
         self.resource = "cpu"
         self.gpu_key = ""
         self.network = ""
+        self.disk_name = ""
         self.seconds = 60
         self.points = []
+        self.secondary_points = []
         layout = vbox(self, (16, 14, 16, 10), 5)
         top = hbox()
         headings = QVBoxLayout()
@@ -159,6 +162,7 @@ class TrendPanel(QFrame):
         self.plot.getPlotItem().setContentsMargins(0, 0, 0, 0)
         self.plot.getPlotItem().getAxis("left").setWidth(38)
         self.curve = self.plot.plot(connect="finite")
+        self.secondary_curve = self.plot.plot(connect="finite")
         self.marker = self.plot.plot(symbol="o", symbolSize=5, pen=None)
         self.plot.scene().sigMouseMoved.connect(self.hover)
         layout.addWidget(self.plot, 1)
@@ -182,7 +186,9 @@ class TrendPanel(QFrame):
         self.render()
 
     def append(self, snapshot):
-        self.history.append(snapshot)
+        # Charts retain only resource history, never hundreds of process rows
+        # for every tick of a fifteen-minute session.
+        self.history.append(replace(snapshot, processes=(), cpu_per_core=(), partitions=(), sensors=()))
         cutoff = snapshot.timestamp - 900
         while self.history and self.history[0].timestamp < cutoff:
             self.history.popleft()
@@ -192,49 +198,75 @@ class TrendPanel(QFrame):
         mapping = {"cpu": ("CPU · 整机总算力为 100%", "accent"),
                    "memory": ("内存 · 按 total − available 统计", "green"),
                    "gpu": ("GPU · 计算利用率", "purple"),
-                   "network": (f"网络下载 · {self.network or '自动网卡'}", "blue")}
+                   "network": (f"下载（蓝）/ 上传（绿）· {self.network or '自动网卡'}", "blue"),
+                   "disk": (f"读取（橙）/ 写入（紫）· {self.disk_name or '选择设备'}", "accent")}
         title, color = mapping[self.resource]
         self.subtitle.setText(title)
         points = []
+        secondary = []
         if self.history:
             now = self.history[-1].timestamp
             previous = None
             for sample in self.history:
                 if now-sample.timestamp > self.seconds:
                     continue
+                other = None
                 if self.resource == "cpu":
                     value = sample.cpu
                 elif self.resource == "memory":
                     value = sample.memory_percent
                 elif self.resource == "network":
-                    value = sample.download if sample.network == self.network else None
+                    nic = next((n for n in sample.network_details if n.name == self.network), None)
+                    value = nic.download if nic else sample.download if sample.network == self.network else None
+                    other = nic.upload if nic else sample.upload if sample.network == self.network else None
                     if value is not None:
                         value /= 1024**2
+                    if other is not None:
+                        other /= 1024**2
+                elif self.resource == "disk":
+                    disk = next((d for d in sample.disks if d.name == self.disk_name), None)
+                    value = disk.read_rate / 1024**2 if disk and disk.read_rate is not None else None
+                    other = disk.write_rate / 1024**2 if disk and disk.write_rate is not None else None
                 else:
                     gpu = next((g for g in sample.gpus if g.key == self.gpu_key), None)
                     value = gpu.utilization if gpu else None
                 x = sample.timestamp-now
                 if previous is not None and sample.timestamp-previous > 7:
                     points.append((x-.01, math.nan))
+                    secondary.append((x-.01, math.nan))
                 points.append((x, value if value is not None else math.nan))
+                secondary.append((x, other if other is not None else math.nan))
                 previous = sample.timestamp
         self.points = points
+        self.secondary_points = secondary
         x = [p[0] for p in points]
         y = [p[1] for p in points]
         c = QColor(self.colors[color])
         fill = QColor(c)
         fill.setAlpha(16)
         self.curve.setData(x, y, pen=pg.mkPen(c, width=2), fillLevel=0, brush=fill)
+        self.secondary_curve.setData([p[0] for p in secondary], [p[1] for p in secondary],
+                                     pen=pg.mkPen(self.colors['green' if self.resource == 'network' else 'purple'], width=2))
         finite = [(a, b) for a, b in points if math.isfinite(b)]
+        other_finite = [(a, b) for a, b in secondary if math.isfinite(b)]
+        throughput = self.resource in ('network', 'disk')
         if finite:
             a, b = finite[-1]
             self.marker.setData([a], [b], symbolBrush=c, symbolPen=None)
-            self.current.setText(f"{b:.2f} MiB/s" if self.resource == "network" else f"{b:.1f}%")
+            self.current.setText(f"{points[-1][1]:.1f}%" if math.isfinite(points[-1][1]) else '当前指标不可用')
         else:
             self.marker.clear()
             self.current.setText("等待采样" if self.resource != "gpu" else "当前指标不可用")
+        if throughput:
+            first = rate(points[-1][1] * 1024**2) if points and math.isfinite(points[-1][1]) else '—'
+            second = rate(secondary[-1][1] * 1024**2) if secondary and math.isfinite(secondary[-1][1]) else '—'
+            self.current.setText(f"{'下载' if self.resource == 'network' else '读取'} {first}    "
+                                 f"{'上传' if self.resource == 'network' else '写入'} {second}")
         self.plot.setXRange(-self.seconds, 0, padding=0)
-        ymax = max([v for _, v in finite] + [.1])*1.2 if self.resource == "network" else 100
+        axis = self.plot.getPlotItem().getAxis('left')
+        axis.setLabel(text='MiB/s' if throughput else '', color=self.colors['subtle'])
+        axis.setWidth(55 if throughput else 38)
+        ymax = max([v for _, v in finite + other_finite] + [.01])*1.2 if throughput else 100
         self.plot.setYRange(0, ymax, padding=0)
 
     def hover(self, position):
@@ -243,8 +275,12 @@ class TrendPanel(QFrame):
         x = self.plot.getPlotItem().vb.mapSceneToView(position).x()
         point = min(self.points, key=lambda p: abs(p[0]-x))
         if math.isfinite(point[1]):
-            unit = "MiB/s" if self.resource == "network" else "%"
-            QToolTip.showText(QCursor.pos(), f"{point[0]:.0f} 秒 · {point[1]:.1f} {unit}", self)
+            unit = "MiB/s" if self.resource in ('network', 'disk') else "%"
+            text = f"{point[0]:.0f} 秒 · {point[1]:.2f} {unit}"
+            if self.resource in ('network', 'disk') and self.secondary_points:
+                other = min(self.secondary_points, key=lambda p: abs(p[0]-x))
+                text += f" / {other[1]:.2f} {unit}" if math.isfinite(other[1]) else ' / —'
+            QToolTip.showText(QCursor.pos(), text, self)
 
 
 class GPUCard(QFrame):
@@ -255,10 +291,12 @@ class GPUCard(QFrame):
         self.setProperty("role", "card")
         self.colors = colors
         self.gpus = ()
-        layout = vbox(self)
+        self.setMinimumHeight(244)
+        layout = vbox(self, (14, 12, 14, 12), 7)
         layout.addWidget(label("GPU 工作状态", "section"))
         self.picker = ComboBox()
         self.picker.setMinimumWidth(180)
+        self.picker.setFixedHeight(30)
         self.picker.currentIndexChanged.connect(self._changed)
         layout.addWidget(self.picker)
         row = hbox(spacing=12)

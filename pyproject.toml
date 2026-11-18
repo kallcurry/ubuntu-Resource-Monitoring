@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ubuntu-pulse-monitor"
-version = "0.1.1"
+version = "0.2.0"
 description = "脉冲 Pulse — Ubuntu 原生资源、进程与端口监控"
 readme = "README.md"
 license = {file = "LICENSE"}

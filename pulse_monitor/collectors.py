@@ -9,6 +9,7 @@ import psutil
 
 from .data import GPUInfo, PortInfo, ProcessInfo, Snapshot
 from .descriptions import describe, display_command
+from .telemetry import Telemetry
 
 
 def counter_rate(current: int, previous: int, elapsed: float) -> float | None:
@@ -131,8 +132,10 @@ class Collector:
     def __init__(self):
         self.cores = psutil.cpu_count() or 1
         self.gpu = NvidiaProvider()
+        self.telemetry = Telemetry()
         self.previous_time: float | None = None
         self.previous_processes: dict[tuple[int, float], float] = {}
+        self.previous_process_io = {}
         self.previous_network = {}
         self.previous_disk = None
         self.processes: dict[int, ProcessInfo] = {}
@@ -141,6 +144,8 @@ class Collector:
     def reset(self):
         self.previous_time = None
         self.previous_processes.clear()
+        self.previous_process_io.clear()
+        self.telemetry.reset()
         self.previous_network.clear()
         self.previous_disk = None
         self.ready = False
@@ -202,8 +207,9 @@ class Collector:
         vram_supported = vram_supported and not other_gpus
         processes = []
         totals = {}
+        process_io = {}
         attrs = ["pid", "name", "username", "cmdline", "memory_info", "create_time",
-                 "cpu_times", "status", "uids"]
+                 "cpu_times", "status", "uids", "num_threads", "ppid", "io_counters"]
         for proc in psutil.process_iter(attrs, ad_value=None):
             try:
                 if not proc.is_running():
@@ -224,6 +230,14 @@ class Collector:
                 proc_name = info.get("name") or "名称不可读"
                 rss = info.get("memory_info")
                 uid = info.get("uids")
+                io = info.get("io_counters")
+                old_io = self.previous_process_io.get(key)
+                read = write = None
+                if io is not None and created is not None:
+                    process_io[key] = io
+                    if old_io is not None and elapsed > 0:
+                        read = counter_rate(io.read_bytes, old_io.read_bytes, elapsed)
+                        write = counter_rate(io.write_bytes, old_io.write_bytes, elapsed)
                 processes.append(ProcessInfo(pid, created, proc_name, describe(proc_name, arguments),
                                              info.get("username") or "权限不足",
                                              uid.real if uid else None,
@@ -231,12 +245,16 @@ class Collector:
                                              info.get("status") or "不可读", process_cpu,
                                              rss.rss if rss else None,
                                              vram.get(pid, 0) if vram_supported else vram.get(pid),
-                                             cpu_available=times is not None and created is not None))
+                                             cpu_available=times is not None and created is not None,
+                                             threads=info.get("num_threads"), parent_pid=info.get("ppid"),
+                                             read_rate=read, write_rate=write))
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
         self.processes = {p.pid: p for p in processes}
+        details = self.telemetry.collect(memory, interfaces, self.previous_network, elapsed, disk)
         self.previous_time = started
         self.previous_processes = totals
+        self.previous_process_io = process_io
         self.previous_network = interfaces
         self.previous_disk = disk_io
         return Snapshot(started, time.time(), cpu, self.cores,
@@ -245,7 +263,7 @@ class Collector:
                         tuple(interfaces), download, upload, disk.used, disk.total,
                         disk_read, disk_write, tuple(gpus), tuple(processes),
                         max(0, time.time()-psutil.boot_time()), time.monotonic()-started,
-                        self.gpu.note if not gpus else "")
+                        self.gpu.note if not gpus else "", **details)
 
     def ports(self) -> tuple[tuple[PortInfo, ...], str]:
         rows = {}
