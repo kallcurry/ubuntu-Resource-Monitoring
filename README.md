@@ -14,7 +14,22 @@
 - **CSV 导出**：导出当前筛选结果，含中文描述；UTF-8 BOM 便于表格软件读取。
 - **桌面体验**：暂停 / 继续、设置持久化、深浅主题、可用时驻留系统托盘、应用菜单入口。
 
-## 快速启动
+## 安装包（推荐）
+
+从 [GitHub Releases](https://github.com/kallcurry/ubuntu-Resource-Monitoring/releases) 下载
+`pulse-monitor_0.1.0_amd64.deb`，适用于 **Ubuntu 24.04 x86_64 / amd64**。
+安装包自带 Python、Qt 和 UI 组件，不需要运行下面的源码环境安装步骤。
+
+```bash
+sudo apt install ./pulse-monitor_0.1.0_amd64.deb
+```
+
+安装后从应用菜单搜索“脉冲资源监控”，或运行 `pulse-monitor`。
+卸载使用 `sudo apt remove pulse-monitor`。设置保存在用户目录，卸载不会主动删除设置。
+同时提供解压即用的 `pulse-monitor-0.1.0-linux-x86_64.tar.gz` 和 `SHA256SUMS` 校验文件。
+显卡驱动沿用系统版本；apt 可能需要联网补齐 Ubuntu 图形系统库。
+
+## 从源码启动
 
 需要 Ubuntu 桌面、Python 3.10+。已在 Ubuntu 24.04、Python 3.13、PySide6 6.9.2 上验证。
 
@@ -116,7 +131,23 @@ docs/               设计评审稿与浏览器交互原型
 
 ## 后续方向
 
-告警阈值、历史持久化、迷你悬浮窗、独立 `.deb` 包，以及 AMD / Intel 更完整的指标适配。首版交付源码和可运行的项目启动脚本，尚未制作独立二进制安装包。
+告警阈值、历史持久化、迷你悬浮窗，以及 AMD / Intel 更完整的指标适配。
+
+## 构建安装包与发布
+
+在 Ubuntu 24.04 x86_64、Python 3.12 的独立环境中：
+
+```bash
+python3.12 -m venv .venv-build
+.venv-build/bin/python -m pip install -r requirements-build.txt
+.venv-build/bin/python scripts/build_release.py
+```
+
+需要 `dpkg-deb`、`desktop-file-validate` 以及 Qt 运行库。输出在 `release/`：
+`.deb` 安装包、便携版 `.tar.gz` 和 SHA-256 校验值。PyInstaller 将解释器和应用依赖一起打包，NVIDIA 驱动库从目标系统读取。
+
+`.github/workflows/release.yml` 会在打包相关代码变更时自动构建、测试便携版和已安装应用，并验证卸载。
+推送与项目版本一致的标签（例如 `v0.1.0`）时，全部验证通过后，才创建并发布带安装包附件的 GitHub Release。
 
 ## 许可证与依赖
 

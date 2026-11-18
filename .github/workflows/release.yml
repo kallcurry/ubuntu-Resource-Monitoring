@@ -1,0 +1,94 @@
+name: Build Ubuntu installer
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'packaging/**'
+      - 'scripts/**'
+      - 'pulse_monitor/**'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYQTGRAPH_QT_LIB: PySide6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install build and Qt runtime tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 desktop-file-utils xvfb xauth
+      - name: Install isolated build dependencies
+        run: python -m pip install -r requirements-build.txt 'pytest>=8,<10'
+      - name: Test native application
+        run: python -m pytest -q
+      - name: Build self-contained installers
+        run: python scripts/build_release.py
+      - name: Test portable executable
+        run: python scripts/smoke_package.py dist/PulseMonitor/PulseMonitor
+      - name: Validate and install Debian package
+        run: |
+          dpkg-deb --info release/*.deb
+          cd release && sha256sum --check SHA256SUMS
+          sudo apt-get install -y ./pulse-monitor_*_amd64.deb
+      - name: Test installed application on X11
+        run: xvfb-run -a python scripts/smoke_package.py /usr/bin/pulse-monitor --x11
+      - name: Verify clean uninstall
+        run: |
+          sudo apt-get remove -y pulse-monitor
+          test ! -e /usr/bin/pulse-monitor
+          test ! -e /opt/pulse-monitor
+          test ! -e /usr/share/applications/pulse-monitor.desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pulse-monitor-ubuntu24-amd64
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pulse-monitor-ubuntu24-amd64
+          path: release
+      - name: Verify tag matches application version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os, tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+          assert os.environ['RELEASE_TAG'] == 'v' + version
+          PY
+      - name: Publish verified installer assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$RELEASE_TAG" release/*.deb release/*.tar.gz release/SHA256SUMS \
+            --verify-tag --draft --title "脉冲 Pulse $RELEASE_TAG · Ubuntu 安装包" \
+            --notes-file packaging/release-notes.md
+          gh release edit "$RELEASE_TAG" --draft=false

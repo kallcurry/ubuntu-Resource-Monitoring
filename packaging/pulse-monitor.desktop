@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Pulse Monitor
+Name[zh_CN]=脉冲资源监控
+Comment=Hardware, process and local port monitoring
+Comment[zh_CN]=硬件资源、中文进程说明与端口占用查询
+Exec=pulse-monitor
+Icon=pulse-monitor
+Terminal=false
+Categories=System;Monitor;
+StartupNotify=true
+StartupWMClass=Pulse Monitor

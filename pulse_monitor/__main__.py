@@ -9,7 +9,9 @@ import sys
 
 
 def main():
+    from . import __version__
     parser = argparse.ArgumentParser(description="脉冲 Pulse · Ubuntu 资源监控")
+    parser.add_argument("--version", action="version", version=f"Pulse Monitor {__version__}")
     parser.add_argument("--config-dir", help="设置保存目录")
     parser.add_argument("--diagnose", action="store_true", help="采集一次能力诊断摘要后退出")
     parser.add_argument("--quit-after", type=float, help="指定秒数后退出，供验证使用")

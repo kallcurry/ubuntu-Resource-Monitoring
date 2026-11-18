@@ -1,10 +1,12 @@
 .venv/
+.venv-build/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 *.egg-info/
 build/
 dist/
+release/
 .ruff_cache/
 .coverage
 runtime-screenshots/
